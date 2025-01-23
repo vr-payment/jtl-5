@@ -1,0 +1,16 @@
+{
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/vr-payment/php-sdk"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "VRPaymentPayment\\": "VRPayment/"
+    }
+  },
+  "require": {
+    "vrpayment/sdk": "4.6.0"
+  }
+}
