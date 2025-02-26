@@ -9,21 +9,31 @@ use Plugin\jtl_vrpayment\VRPaymentApiClient;
 /** @global JTL\Plugin\PluginInterface $plugin */
 
 $transactionId = (int)$_GET['tID'] ?? null;
-
 if ($transactionId) {
     $apiClient = new VRPaymentApiClient($plugin->getId());
     $transactionService = new VRPaymentTransactionService($apiClient->getApiClient(), $plugin);
-    $localTransaction = $transactionService->getLocalVRPaymentTransactionById((string)$transactionId);
-    $orderId = (int) $localTransaction->order_id;
+
+    // In case error from api, we will try to fetch transaction again
     $transaction = $transactionService->getTransactionFromPortal($transactionId);
+	Shop::Container()->getLogService()->notice(
+	  "Transaction found. Starting to create order."
+	);
     $createAfterPayment = (int)$transaction->getMetaData()['orderAfterPayment'] ?? 1;
     if ($createAfterPayment) {
-        $orderNr = $transaction->getMetaData()['order_nr'];
-        $data = $transactionService->getOrderIfExists($orderNr);
-        if ($data === null) {
-            $orderId = $transactionService->createOrderAfterPayment($transactionId);
-        }
+        $orderId = (int)$transaction->getMetaData()['orderId'];
+        $order = new Bestellung($orderId);
+        $orderId = (int)$order->kBestellung;
+    } else {
+		Shop::Container()->getLogService()->notice(
+		  "Order was not created. We created it previously and returning the ID."
+		);
+        $localTransaction = $transactionService->getLocalVRPaymentTransactionById((string)$transactionId);
+        $orderId = (int) $localTransaction->order_id;
     }
+} else {
+    Shop::Container()->getLogService()->notice(
+        "No transaction ID."
+    );
 }
 
 $_SESSION['transactionId'] = null;

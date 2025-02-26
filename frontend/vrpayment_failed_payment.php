@@ -1,10 +1,10 @@
 <?php declare(strict_types=1);
 
 use JTL\Shop;
+use JTL\Alert\Alert;
 use Plugin\jtl_vrpayment\Services\VRPaymentTransactionService;
 use Plugin\jtl_vrpayment\VRPaymentApiClient;
 use Plugin\jtl_vrpayment\VRPaymentHelper;
-use JTL\Alert\Alert;
 
 /** @global \JTL\Smarty\JTLSmarty $smarty */
 /** @global JTL\Plugin\PluginInterface $plugin */

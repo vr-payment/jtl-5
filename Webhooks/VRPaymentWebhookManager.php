@@ -22,9 +22,6 @@ use VRPayment\Sdk\Model\{TransactionInvoiceState, TransactionState};
  */
 class VRPaymentWebhookManager
 {
-    private const MAX_RETRIES = 5;
-    private const PAUSE_DURATION = 2; // seconds
-
     /**
      * @var array $data
      */
@@ -90,25 +87,11 @@ class VRPaymentWebhookManager
 
         switch ($listenerEntityTechnicalName) {
             case VRPaymentHelper::TRANSACTION:
-
-                $transaction = $this->transactionService->getTransactionFromPortal($entityId);
-                if ($transaction->getState() === TransactionState::FULFILL) {
-                    $this->waitUntilOrderIsCreated($transaction);
-                }
-
                 $orderUpdater->updateOrderStatus($entityId);
                 break;
 
             case VRPaymentHelper::TRANSACTION_INVOICE:
                 $orderUpdater->setStrategy(new VRPaymentNameOrderUpdateTransactionInvoiceStrategy($this->transactionService));
-                $transactionInvoice = $this->transactionService->getTransactionInvoiceFromPortal($entityId);
-                $transaction = $transactionInvoice->getCompletion()
-                  ->getLineItemVersion()
-                  ->getTransaction();
-
-                if ($transaction->getState() === TransactionState::FULFILL) {
-                    $this->waitUntilOrderIsCreated($transaction);
-                }
                 $orderUpdater->updateOrderStatus($entityId);
                 break;
 
@@ -123,31 +106,5 @@ class VRPaymentWebhookManager
                 break;
         }
     }
-
-    /**
-     * Order ID sometimes comes too late, so we need to wait first until order is created.
-     * @param $transaction
-     * @return void
-     */
-    private function waitUntilOrderIsCreated($transaction): void
-    {
-        $orderNr = $transaction->getMetaData()['order_nr'];
-
-        for ($attempt = 0; $attempt < self::MAX_RETRIES; $attempt++) {
-            $orderData = $this->transactionService->getOrderIfExists($orderNr);
-
-            if (isset($orderData->kBestellung)) {
-                return; // Order found, exit the method
-            }
-
-            sleep(self::PAUSE_DURATION);
-        }
-
-        // Log a warning or handle the case where the order was not found after retries
-        Shop::Container()->getLogService()->warning(
-          "Order not found for Transaction {$transaction->getId()} after " . self::MAX_RETRIES . " attempts."
-        );
-    }
-
 }
 

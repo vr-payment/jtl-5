@@ -36,7 +36,7 @@ account dashboard.
 
 ## Documentation
 
-[Documentation](https://gateway.vr-payment.de/doc/jtl-5/1.0.35-beta/docs/en/documentation.html)
+[Documentation](https://gateway.vr-payment.de/doc/jtl-5/1.0.35/docs/en/documentation.html)
 
 ## License
 

@@ -3,6 +3,7 @@
 namespace Plugin\jtl_vrpayment\Webhooks\Strategies;
 
 use JTL\Shop;
+use JTL\Checkout\Bestellung;
 use Plugin\jtl_vrpayment\Services\VRPaymentOrderService;
 use Plugin\jtl_vrpayment\Services\VRPaymentTransactionService;
 use Plugin\jtl_vrpayment\Webhooks\Strategies\Interfaces\VRPaymentOrderUpdateStrategyInterface;
@@ -34,25 +35,25 @@ class VRPaymentNameOrderUpdateTransactionInvoiceStrategy implements VRPaymentOrd
     public function updateOrderStatus(string $entityId): void
     {
         $transactionInvoice = $this->transactionService->getTransactionInvoiceFromPortal($entityId);
+        if ($transactionInvoice === null) {
+            print 'Transaction Invoice ' . $entityId . ' not found';
+            exit;
+        }
 
         $transaction = $transactionInvoice->getCompletion()
             ->getLineItemVersion()
             ->getTransaction();
-        
-        
-        $orderNr = $transaction->getMetaData()['order_nr'];
+
+        if ($transaction === null) {
+            print 'Transaction for Transaction Invoice  ' . $entityId . ' not found';
+            exit;
+        }
+
         $transactionId = $transaction->getId();
-        
-        // Fallback for older plugin versions
-        if ($orderNr === null) {
-            $localTransaction = $this->transactionService->getLocalVRPaymentTransactionById((string)$transactionId);
-            $orderId = (int)$localTransaction->order_id;
-        } else {
-            $orderData = $this->transactionService->getOrderIfExists($orderNr);
-            if ($orderData === null) {
-                return;
-            }
-            $orderId = (int)$orderData->kBestellung;
+        $orderId = (int)$transaction->getMetaData()['orderId'];
+        if ($orderId === 0) {
+            print 'Order not found for transaction ' . $entityId;
+            exit;
         }
 
         switch ($transactionInvoice->getState()) {
@@ -69,7 +70,8 @@ class VRPaymentNameOrderUpdateTransactionInvoiceStrategy implements VRPaymentOrd
                 }
 
                 $order = new Bestellung($orderId);
-                $this->transactionService->addIncommingPayment((string)$transactionId, $order, $transaction);
+                $this->transactionService->addIncomingPayment((string)$transactionId, $order, $transaction);
+                $this->transactionService->handleNextOrderReferenceNumber($transaction->getMetaData()['order_no']);
                 print 'Order ' . $orderId . ' status was updated to paid. Triggered by Transaction Invoice webhook.';
                 break;
         }

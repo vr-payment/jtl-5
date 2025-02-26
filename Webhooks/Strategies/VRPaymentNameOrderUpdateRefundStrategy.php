@@ -55,8 +55,8 @@ class VRPaymentNameOrderUpdateRefundStrategy implements VRPaymentOrderUpdateStra
          * @var \VRPayment\Sdk\Model\Refund $refund
          */
         $refund = $this->refundService->getRefundFromPortal($entityId);
+        $orderId = (int)$refund->getTransaction()->getMetaData()['orderId'] ?? '';
 
-        $orderId = (int)$refund->getTransaction()->getMetaData()['orderId'];
         if (empty($orderId)) {
             $transactionId = (int)$refund->getTransaction()->getId();
             $localTransaction = $this->transactionService->getLocalVRPaymentTransactionById((string)$transactionId);
@@ -77,11 +77,10 @@ class VRPaymentNameOrderUpdateRefundStrategy implements VRPaymentOrderUpdateStra
                     foreach ($refund->getReducedLineItems() as $line_item) {
                         if ($line_item_id == $line_item->getUniqueId()) {
                             $product_name = $line_item->getName();
-                            $product = Product::getProductByAttribute('cName', $product_name);
-                            if ($product instanceof Artikel) {
-                                $productID = $product->getID();
-                                // Amount is negative because we're filling up the stock.
-                                $this->stockUpdater->updateProductStockLevel($productID, -1, $quantity);
+                            $product = Shop::Container()->getDB()->select('tartikel', 'cName', $product_name);
+                            $productId = (int) ($product->kArtikel ?? 0);
+                            if ($productId > 0) {
+                                $this->stockUpdater->updateProductStockLevel($productId, -1, $quantity);
                             }
                         }
                     }

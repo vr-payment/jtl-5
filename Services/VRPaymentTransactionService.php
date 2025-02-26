@@ -40,6 +40,11 @@ use VRPayment\Sdk\Model\{AddressCreate,
 
 class VRPaymentTransactionService
 {
+    private const MAX_RETRIES = 12;
+    private const PAUSE_DURATION = 5;
+    public const LET_SYNC_TO_WAWI = 'N';
+    public const NOT_SYNC_TO_WAWI = 'Y';
+
     /**
      * @var ApiClient $apiClient
      */
@@ -128,69 +133,68 @@ class VRPaymentTransactionService
      * @param Transaction $transaction
      * @return void
      */
-    public function confirmTransaction(Transaction $transaction): void
+    public function confirmTransaction(Transaction $pendingTransaction): void
     {
-        $transactionId = $transaction->getId();
-        $pendingTransaction = new TransactionPending();
-        $pendingTransaction->setId($transactionId);
-        $pendingTransaction->setVersion($transaction->getVersion());
-
+        $transactionId = $pendingTransaction->getId();
         $lineItems = $this->getLineItems($_SESSION['Warenkorb']->PositionenArr);
         $pendingTransaction->setLineItems($lineItems);
         $pendingTransaction->setCurrency($_SESSION['cWaehrungName']);
         $pendingTransaction->setLanguage(VRPaymentHelper::getLanguageString());
+        $pendingTransaction->setBillingAddress($this->createBillingAddress());
+        $pendingTransaction->setShippingAddress($this->createShippingAddress());
 
         $obj = Shop::Container()->getDB()->selectSingleRow('tzahlungsart', 'kZahlungsart', (int)$_SESSION['AktiveZahlungsart']);
         $createOrderAfterPayment = (int)$obj->nWaehrendBestellung ?? 1;
+        $orderReferenceNumber = null;
 
-        $orderNumber = null;
+        $order = new \stdClass();
+        $order->transaction_id = $transactionId;
+        $order->payment_method = $_SESSION['possiblePaymentMethodName'];
+        $order->space_id = $this->spaceId;
+        $order->state = TransactionState::PENDING;
+        $order->created_at = date('Y-m-d H:i:s');
+
         if ($createOrderAfterPayment === 1) {
-            $orderId = null;
             if ($this->isPreventFromDuplicatedOrders()) {
-                [$orderNr, $orderNumber] = VRPaymentHelper::createOrderNo();
+                [$orderNr, $orderReferenceNumber] = VRPaymentHelper::createOrderNo();
                 $transactionByOrderReference = $this->getTransactionByOrderReference($orderNr);
 
                 if ($transactionByOrderReference) {
-                    [$orderNr, $orderNumber] = VRPaymentHelper::createOrderNo();
-                    $pendingTransaction->setVersion($transaction->getVersion() + 1);
+                    [$orderNr, $orderReferenceNumber] = VRPaymentHelper::createOrderNo();
+                    $pendingTransaction->setVersion($pendingTransaction->getVersion() + 1);
                     $pendingTransaction->setMerchantReference($orderNr);
                     $this->apiClient->getTransactionService()->update($this->spaceId, $pendingTransaction);
                 }
             } else {
-                [$orderNr, $orderNumber] = VRPaymentHelper::createOrderNo(false);
+                [$orderNr, $orderReferenceNumber] = VRPaymentHelper::createOrderNo(false);
             }
 
-            $order = new \stdClass();
-            $order->transaction_id = $transactionId;
+            $orderHandler = new OrderHandler(Shop::Container()->getDB(), Frontend::getCustomer(), Frontend::getCart());
+
+            // We create order and add all required related data to it with fuelleBestellung
+            $orderData = $orderHandler->finalizeOrder($orderNr, false);
+            $orderData->fuelleBestellung(true);
+
+            $orderId = (int) $orderData->kBestellung;
+            // We tell to wawi do not synchronise it, because it's not paid yet. Wawi do not have pending state, so, we have to tell that it's already synchronised.
+            // Later, when payment is accepted, we change the flag to N and ask Wawi to synchronise it.
+            $this->updateWawiSyncFlag($orderId, self::NOT_SYNC_TO_WAWI);
             $order->data = json_encode([]);
-            $order->payment_method = $_SESSION['possiblePaymentMethodName'];
-            $order->order_id = null;
-            $order->space_id = $this->spaceId;
-            $order->state = TransactionState::PENDING;
-            $order->created_at = date('Y-m-d H:i:s');
-            $this->createLocalVRPaymentTransaction((string)$transactionId, (array)$order);
+            $order->order_id = $orderId;
         } else {
             $orderId = $_SESSION['kBestellung'] ?? $_SESSION['oBesucher']->kBestellung;
-            $orderNr = $_SESSION['BestellNr'] ?? $_SESSION['nextOrderNr'];
-
-            $order = new \stdClass();
-            $order->transaction_id = $transactionId;
+            $orderNr = $_SESSION['BestellNr'] ?? null;
             $order->data = json_encode((array)$order);
-            $order->payment_method = $_SESSION['possiblePaymentMethodName'];
             $order->order_id = $orderId;
-            $order->space_id = $this->spaceId;
-            $order->state = TransactionState::PENDING;
-            $order->created_at = date('Y-m-d H:i:s');
-
-            $this->createLocalVRPaymentTransaction((string)$transactionId, (array)$order);
         }
+        $this->createLocalVRPaymentTransaction((string)$transactionId, (array)$order);
 
         $pendingTransaction->setMetaData([
             'orderId' => $orderId,
             'spaceId' => $this->spaceId,
             'orderAfterPayment' => $createOrderAfterPayment,
             'order_nr' => $orderNr,
-            'order_no' => $orderNumber
+            'order_no' => $orderReferenceNumber
         ]);
 
         $pendingTransaction->setMerchantReference($orderNr);
@@ -220,31 +224,18 @@ class VRPaymentTransactionService
      * @param string $orderNr
      * @return array
      */
-    protected function getTransactionByOrderReference(string $orderNr): array
-    {
-        $states = [
-            TransactionState::CONFIRMED,
-            TransactionState::PROCESSING,
-            TransactionState::FULFILL,
-        ];
-
-        $filters = array_map(function($state) use ($orderNr) {
-            return (new EntityQueryFilter())
-                ->setType(EntityQueryFilterType::_AND)
-                ->setChildren([
-                    $this->getEntityFilter('state', $state),
-                    $this->getEntityFilter('merchantReference', $orderNr),
-                ]);
-        }, $states);
-
+	protected function getTransactionByOrderReference(string $orderNr): array
+	{
         $entityQueryFilter = (new EntityQueryFilter())
-            ->setType(EntityQueryFilterType::_OR)
-            ->setChildren($filters);
+            ->setType(EntityQueryFilterType::_AND)
+            ->setChildren([
+            $this->getEntityFilter('merchantReference', $orderNr),
+        ]);
 
         $query = (new EntityQuery())->setFilter($entityQueryFilter);
 
         return $this->apiClient->getTransactionService()->search($this->spaceId, $query);
-    }
+	}
 
     /**
      * Creates and returns a new entity filter.
@@ -273,13 +264,8 @@ class VRPaymentTransactionService
     {
         $pendingTransaction = new TransactionPending();
         $transaction = $this->getTransactionFromPortal($transactionId);
-        $statesToUpdate = [
-          TransactionState::DECLINE,
-          TransactionState::FAILED,
-          TransactionState::VOIDED,
-          TransactionState::PROCESSING
-        ];
-        if (empty($transaction) || empty($transaction->getVersion()) || in_array($transaction->getState(), $statesToUpdate)) {
+
+        if (empty($transaction) || empty($transaction->getVersion()) || $transaction->getState() !== TransactionState::PENDING) {
           $_SESSION['transactionId'] = null;
           $translations = VRPaymentHelper::getTranslations($this->plugin->getLocalization(), [
             'jtl_vrpayment_transaction_timeout',
@@ -488,7 +474,7 @@ class VRPaymentTransactionService
      * @param array $orderData
      * @return void
      */
-    public function createLocalVRPaymentTransaction(string $transactionId, array $orderData): void
+    public function createLocalVRPaymentTransaction(string $transactionId, array $orderData, $state = TransactionState::PENDING): void
     {
         $newTransaction = new \stdClass();
         $newTransaction->transaction_id = $transactionId;
@@ -496,7 +482,7 @@ class VRPaymentTransactionService
         $newTransaction->payment_method = $orderData['payment_method'];
         $newTransaction->order_id = $orderData['order_id'];
         $newTransaction->space_id = $this->spaceId;
-        $newTransaction->state = TransactionState::PENDING;
+        $newTransaction->state = $state;
         $newTransaction->created_at = date('Y-m-d H:i:s');
 
         Shop::Container()->getDB()->delete('vrpayment_transactions', 'transaction_id', $transactionId);
@@ -509,7 +495,7 @@ class VRPaymentTransactionService
      * @param Transaction $transaction
      * @return void
      */
-    public function addIncommingPayment(string $transactionId, Bestellung $order, Transaction $transaction): void
+    public function addIncomingPayment(string $transactionId, Bestellung $order, Transaction $transaction): void
     {
         $orderId = (int)$order->kBestellung;
         if ($orderId === 0) {
@@ -542,68 +528,8 @@ class VRPaymentTransactionService
             // Even when the sendEmail is invoked here, the email will be or not sent according to several conditions.
             $this->sendEmail($orderId, 'fulfill');
         } else {
-            Shop::Container()->getLogService()->error('addIncommingPayment payment was not created, because transaction was not in FULFILL status. TransactionId: ' . $transactionId);
+            Shop::Container()->getLogService()->error('addIncomingPayment payment was not created, because transaction was not in FULFILL status. TransactionId: ' . $transactionId);
         }
-    }
-
-    /**
-     * @param int $transactionId
-     * @return int
-     */
-    public function createOrderAfterPayment(int $transactionId): int
-    {
-        $_SESSION['finalize'] = true;
-
-        $transaction = $this->getTransactionFromPortal($transactionId);
-        $orderNr = $transaction->getMetaData()['order_nr'];
-        $orderHandler = new OrderHandler(Shop::Container()->getDB(), Frontend::getCustomer(), Frontend::getCart());
-
-        if ($this->isPreventFromDuplicatedOrders()) {
-            // We check if order exist with such order nr. If yes, we select it's data, if not - we create it.
-            // This check prevents only in these cases when webhook is triggered more than once or user refresh the page, or
-            // got lost internet connection. It's more like catching edge case
-            $data = $this->getOrderIfExists($orderNr);
-            if ($data === null) {
-                // Order wasn't created before, so we insert new record
-                $order = $orderHandler->finalizeOrder($orderNr, false);
-            } else {
-                // We select order from database and creating backup with all session data
-                $order = new Bestellung((int)$data->kBestellung);
-            }
-        } else {
-            // Updates order number for next order. Increase by 1 if is needed
-            $lastOrderNo = $transaction->getMetaData()['order_no'];
-            VRPaymentHelper::createOrderNo(true, $lastOrderNo);
-            // Always inserting new order
-            $order = $orderHandler->finalizeOrder($orderNr, false);
-        }
-        $this->updateLocalVRPaymentTransaction((string)$transactionId, TransactionState::AUTHORIZED, (int)$order->kBestellung);
-
-        if ($transaction->getState() === TransactionState::FULFILL) {
-            // fuelleBestellung - JTL5 native function to append all required data to order
-            $orderData = $order->fuelleBestellung(true);
-            $this->addIncommingPayment((string)$transactionId, $orderData, $transaction);
-        }
-
-        return (int)$order->kBestellung;
-    }
-
-    /**
-     * @param string $orderNr
-     * @return void
-     */
-    public function getOrderIfExists(string $orderNr): ?stdClass
-    {
-        $db = Shop::Container()->getDB();
-
-        // Prepare and execute the query directly
-        $query = "SELECT kBestellung FROM tbestellung WHERE cBestellNr = :orderNr ORDER BY dErstellt DESC LIMIT 1";
-        $params = ['orderNr' => $orderNr];
-
-        $data = $db->executeQueryPrepared($query, $params, 1); // The '1' here signifies to fetch one row only
-
-        // Check if data is retrieved, otherwise return null
-        return $data ?: null;
     }
 
     /**
@@ -786,7 +712,10 @@ class VRPaymentTransactionService
      */
     private function createBillingAddress(): AddressCreate
     {
-        $customer = $_SESSION['Kunde'];
+        $customer = $_SESSION['orderData']?->oRechnungsadresse;
+        if ($customer === null) {
+            $customer = $_SESSION['Kunde'];
+        }
 
         $billingAddress = new AddressCreate();
         $billingAddress->setStreet($customer->cStrasse . ' ' . $customer->cHausnummer);
@@ -796,7 +725,7 @@ class VRPaymentTransactionService
         $billingAddress->setFamilyName($customer->cNachname);
         $billingAddress->setGivenName($customer->cVorname);
         $billingAddress->setPostCode($customer->cPLZ);
-        $billingAddress->setPostalState($customer->cBundesland);
+        $billingAddress->setPostalState($customer->cLand ?? $customer->cBundesland);
         $billingAddress->setOrganizationName($customer->cFirma);
         $billingAddress->setPhoneNumber($customer->cMobil);
 
@@ -823,7 +752,11 @@ class VRPaymentTransactionService
             $billingAddress->setDateOfBirth($birthday);
         }
 
-        $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? '';
+        $gender = $_SESSION['orderData']?->oRechnungsadresse?->cAnrede ?? '';
+        if (empty($gender)) {
+            $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? '';
+        }
+
         if ($gender !== null) {
             $billingAddress->setGender($gender === 'm' ? Gender::MALE : Gender::FEMALE);
             $billingAddress->setSalutation($gender === 'm' ? 'Mr' : 'Ms');
@@ -837,7 +770,10 @@ class VRPaymentTransactionService
      */
     private function createShippingAddress(): AddressCreate
     {
-        $customer = $_SESSION['Lieferadresse'];
+        $customer = $_SESSION['orderData']?->Lieferadresse;
+        if ($customer === null) {
+            $customer = $_SESSION['Kunde'];
+        }
 
         $shippingAddress = new AddressCreate();
         $shippingAddress->setStreet($customer->cStrasse . ' ' . $customer->cHausnummer);
@@ -847,12 +783,16 @@ class VRPaymentTransactionService
         $shippingAddress->setFamilyName($customer->cNachname);
         $shippingAddress->setGivenName($customer->cVorname);
         $shippingAddress->setPostCode($customer->cPLZ);
-        $shippingAddress->setPostalState($customer->cBundesland);
+        $shippingAddress->setPostalState($customer->cLand ?? $customer->cBundesland);
         $shippingAddress->setOrganizationName($customer->cFirma);
         $shippingAddress->setPhoneNumber($customer->cMobil);
         $shippingAddress->setSalutation($customer->cTitel);
 
-        $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? null;
+        $gender = $_SESSION['orderData']?->Lieferadresse?->cAnrede ?? '';
+        if (empty($gender)) {
+            $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? null;
+        }
+
         if ($gender !== null) {
             $shippingAddress->setGender($gender === 'm' ? Gender::MALE : Gender::FEMALE);
             $shippingAddress->setSalutation($gender === 'm' ? 'Mr' : 'Ms');
@@ -864,12 +804,24 @@ class VRPaymentTransactionService
     /**
      * @return bool
      */
-    private function isPreventFromDuplicatedOrders(): bool
+    public function isPreventFromDuplicatedOrders(): bool
     {
         $config = VRPaymentHelper::getConfigByID($this->plugin->getId());
         $preventFromDuplicatedOrders = $config[VRPaymentHelper::PREVENT_FROM_DUPLICATED_ORDERS] ?? null;
 
         return strtolower($preventFromDuplicatedOrders) === 'yes';
+    }
+
+    /**
+     * @param string $orderReference
+     * @return void
+     */
+    public function handleNextOrderReferenceNumber(string $orderReference): void
+    {
+        if ($this->isPreventFromDuplicatedOrders() === false) {
+            // Updates order number for next order. Increase by 1 if is needed
+            VRPaymentHelper::createOrderNo(true, $orderReference);
+        }
     }
 
     /**
@@ -884,6 +836,21 @@ class VRPaymentTransactionService
         if (!$this->mailService->isEmailSent($orderId, $template)) {
             $this->mailService->sendMail($orderId, $template);
         }
+    }
+
+    /**
+     * @param int $orderId
+     * @param $flag
+     * @return void
+     */
+    public function updateWawiSyncFlag(int $orderId, $flag) {
+        Shop::Container()
+            ->getDB()->update(
+            'tbestellung',
+            ['kBestellung',],
+            [$orderId],
+            (object)['cAbgeholt' => $flag]
+        );
     }
 }
 
