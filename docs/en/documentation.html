@@ -4,7 +4,7 @@
 		<meta charset="utf-8">
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-		<meta name="keywords" value="VRPayment, JTL5, JTL5 Plugin, Payment, Payment Integration, Documentation"><meta name="description" value="The documentation for the JTL5 plugin that enables processing payments with VRPay.">		
+		<meta name="keywords" value="VRPayment, JTL5, JTL5 Plugin, Payment, Payment Integration, Documentation"><meta name="description" value="The documentation for the JTL5 plugin that enables processing payments with VR Payment.">		
 		<link rel="canonical" href="https://plugin-documentation.wallee.com/wallee-payment/jtl-5/master/vrpayment/docs/en/documentation.html" />
 		<title>VRPayment JTL5 Documentation</title>
 		<link href="assets/monokai-sublime.css" rel="stylesheet" />
@@ -39,7 +39,7 @@
 	</div>
 	<div class="chapter-body">
 					<div class="paragraph">
-<p>If you don&#8217;t already have one, create a <a href="https://gateway.vr-payment.de/user/login/">VRPay</a> account.</p>
+<p>If you don&#8217;t already have one, create a <a href="https://gateway.vr-payment.de/user/login/">VR Payment</a> account.</p>
 </div>					</div>
 </div>	<div class="chapter" id="_installation">
 	<div class="chapter-title">
@@ -77,7 +77,7 @@
 					<div class="olist arabic">
 <ol class="arabic">
 <li>
-<p>Navigate to Installed plug-ins &#8594; VRPayment Payment in your JTL5 backend and click the tab Plugin Configuration. Enter the VRPay Space ID, User ID and Authentication Key that you can create a <a href="https://gateway.vr-payment.de/en-us/doc/permission-concept#_create_application_users" target="_blank">application user</a>.</p>
+<p>Navigate to Installed plug-ins &#8594; VRPayment Payment in your JTL5 backend and click the tab Plugin Configuration. Enter the VR Payment Space ID, User ID and Authentication Key that you can create a <a href="https://gateway.vr-payment.de/en-us/doc/permission-concept#_create_application_users" target="_blank">application user</a>.</p>
 <div class="imageblock">
 <div class="content">
 <img src="resource/plugin-configuration.png" alt="plugin configuration"/>
@@ -103,7 +103,7 @@ You can see payment methods at Payment methods section in your JTL5 backend.</p>
 	</div>
 	<div class="section-body">
 					<div class="paragraph">
-<p>The VRPay payment method configurations are synchronized automatically into the JTL5 store and they are activated by default.</p>
+<p>The VR Payment payment method configurations are synchronized automatically into the JTL5 store and they are activated by default.</p>
 </div><div class="imageblock">
 <div class="content">
 <img src="resource/payment-method-configuration.png" alt="payment method configuration"/>
@@ -126,11 +126,11 @@ You can see payment methods at Payment methods section in your JTL5 backend.</p>
 	</div>
 	<div class="chapter-body">
 					<div class="paragraph">
-<p>The Payment Process of VRPay is <strong>completely standardized for every payment method</strong> you can process. This gives you the ability to configure
-a payment method or processor without changes inside of your JTL5 configuration. An overview about the states and the payment processes of VRPay
+<p>The Payment Process of VR Payment is <strong>completely standardized for every payment method</strong> you can process. This gives you the ability to configure
+a payment method or processor without changes inside of your JTL5 configuration. An overview about the states and the payment processes of VR Payment
 can be found in the <a href="https://gateway.vr-payment.de/en-us/doc/payment/transaction-process" target="_blank">Payment Documentation</a>.</p>
 </div><div class="paragraph">
-<p>In the following section we provide you an overview about how the VRPay states are mapped into the JTL5 State graph for orders and payment states.</p>
+<p>In the following section we provide you an overview about how the VR Payment states are mapped into the JTL5 State graph for orders and payment states.</p>
 </div>							<div class="section" id="_state_mapping_of_jtl5_orders">
 	<div class="section-title">
 		<h2>
@@ -164,7 +164,7 @@ can be found in the <a href="https://gateway.vr-payment.de/en-us/doc/payment/tra
 </div><div class="olist glossary">
 <ol class="glossary">
 <li>
-<p>If the transaction is <code>Authorized</code> in VRPay, the JTL5 order payment status is marked as <code>In Progress</code>.</p>
+<p>If the transaction is <code>Authorized</code> in VR Payment, the JTL5 order payment status is marked as <code>In Progress</code>.</p>
 </li>
 <li>
 <p>If the transaction fails before or during the authorization process, the JTL5 order payment status is marked as <code>Failed</code>.</p>
@@ -173,7 +173,7 @@ can be found in the <a href="https://gateway.vr-payment.de/en-us/doc/payment/tra
 <p>If the transaction fails after the authorization, the JTL5 order payment status is marked as <code>Cancelled</code>.</p>
 </li>
 <li>
-<p>If the transaction invoice in VRPay is marked as <code>Paid</code> or <code>Not Applicable</code>, the JTL5 order payment status is marked as <code>Paid</code>.</p>
+<p>If the transaction invoice in VR Payment is marked as <code>Paid</code> or <code>Not Applicable</code>, the JTL5 order payment status is marked as <code>Paid</code>.</p>
 </li>
 </ol>
 </div>							<div class="section" id="_general_remarks_regarding_payment_statuses">
@@ -201,10 +201,10 @@ can be found in the <a href="https://gateway.vr-payment.de/en-us/doc/payment/tra
 </div><div class="olist glossary">
 <ol class="glossary">
 <li>
-<p>If the transaction is <code>Confirmed</code> status in VRPay, the JTL5 order delivery status is marked as <code>Hold</code>.</p>
+<p>If the transaction is <code>Confirmed</code> status in VR Payment, the JTL5 order delivery status is marked as <code>Hold</code>.</p>
 </li>
 <li>
-<p>If the transaction in VRPay is marked as <code>Fulfill</code>, the JTL5 order delivery status is marked as <code>Open</code>.</p>
+<p>If the transaction in VR Payment is marked as <code>Fulfill</code>, the JTL5 order delivery status is marked as <code>Open</code>.</p>
 </li>
 <li>
 <p>If the transaction is in <code>Decline</code>, <code>Failed</code> or <code>Voided</code>, the JTL5 order delivery status is marked as <code>Cancelled</code>.</p>
@@ -220,7 +220,7 @@ can be found in the <a href="https://gateway.vr-payment.de/en-us/doc/payment/tra
 	<div class="chapter-body">
 					<div class="paragraph">
 <p>You can capture, cancel and refund transactions directly from within the JTL5 backend. Please note
-if you refund, void or capture transactions inside VRPay the events will be synchronized into
+if you refund, void or capture transactions inside VR Payment the events will be synchronized into
 JTL5. However, there are some limitations (see below).</p>
 </div>							<div class="section" id="_complete_capture_an_order">
 	<div class="section-title">
@@ -239,7 +239,7 @@ JTL5. However, there are some limitations (see below).</p>
 <div class="title">Note</div>
 </td>
 <td class="content">
-When the completion is pending in VRPay the order will stay in pending state.
+When the completion is pending in VR Payment the order will stay in pending state.
 </td>
 </tr>
 </table>
@@ -250,11 +250,11 @@ When the completion is pending in VRPay the order will stay in pending state.
 </div><div class="paragraph">
 <p><strong>Deferred payment completion</strong></p>
 </div><div class="paragraph">
-<p>Retailers often have the case that they want to authorize transactions only and start the fulfillment process once all items are shippable. This is also possible with VRPay.</p>
+<p>Retailers often have the case that they want to authorize transactions only and start the fulfillment process once all items are shippable. This is also possible with VR Payment.</p>
 </div><div class="paragraph">
 <p>However, certain processes should be followed. If you have configured payment completion to be deferred you should capture the transaction before you initiate the shipment
 as it can always happen that a completion fails. If you want to be sure that you do not ship items for which you have not been paid you should postpone the shipment until
-the fulfill state is reached. Initially the transaction will be in the <code>Authorized</code> state in VRPay and <code>In Progress</code> in JTL5. If you want to start the fulfillment process make sure you initiate the completion process as described above. Once the completion was successful the order will switch into the <code>Fulfill</code> state in VRPay and into <code>Paid</code> state in JTL5. You can now start the fulfillment process.</p>
+the fulfill state is reached. Initially the transaction will be in the <code>Authorized</code> state in VR Payment and <code>In Progress</code> in JTL5. If you want to start the fulfillment process make sure you initiate the completion process as described above. Once the completion was successful the order will switch into the <code>Fulfill</code> state in VR Payment and into <code>Paid</code> state in JTL5. You can now start the fulfillment process.</p>
 </div>					</div>
 </div>					<div class="section" id="_void_a_transaction">
 	<div class="section-title">
@@ -302,18 +302,18 @@ It can take some time until you see the refund in JTL5. Refunds will only be vis
 </div>					<div class="section" id="_limitations_of_the_synchronization_between_whitelabelname_and_jtl5">
 	<div class="section-title">
 		<h2>
-			<span class="title-number">6.4</span>Limitations of the synchronization between VRPay and JTL5					</h2>
+			<span class="title-number">6.4</span>Limitations of the synchronization between VR Payment and JTL5					</h2>
 	</div>
 	<div class="section-body">
 					<div class="paragraph">
-<p>Please note that captures, voids and refunds done in VRPay are synchronized. However, there are some
-limitations. Inside VRPay you are able to change the <strong>unit price</strong> and the <strong>quantity</strong> at once. This can not
+<p>Please note that captures, voids and refunds done in VR Payment are synchronized. However, there are some
+limitations. Inside VR Payment you are able to change the <strong>unit price</strong> and the <strong>quantity</strong> at once. This can not
 be done in the JTL5 backend. We therefore recommend that you
-perform the refunds always inside the JTL5 backend and not inside VRPay. If a refund
+perform the refunds always inside the JTL5 backend and not inside VR Payment. If a refund
 cannot be synchronized it will be sent to the processor but it could be that you do not see it inside
 your JTL5 backend.</p>
 </div><div class="paragraph">
-<p>You can find more information about Refunds in VRPay in our <a href="https://gateway.vr-payment.de/en-us/doc/payment/refund" target="_blank">Refund Documentation</a>.</p>
+<p>You can find more information about Refunds in VR Payment in our <a href="https://gateway.vr-payment.de/en-us/doc/payment/refund" target="_blank">Refund Documentation</a>.</p>
 </div>					</div>
 </div>					<div class="section" id="_tokenization">
 	<div class="section-title">
@@ -360,7 +360,7 @@ The extension will log various unexpected errors or information which can help i
 	</div>
 	<div class="section-body">
 					<div class="paragraph">
-<p>Make sure that you followed the <a href="#_configuration">Configuration</a> section by stating your VRPay space ID and application user&#8217;s access information in the JTL5 backend. By saving the configuration form the synchronization of the payment methods and the set up of the webhooks are initiated.</p>
+<p>Make sure that you followed the <a href="#_configuration">Configuration</a> section by stating your VR Payment space ID and application user&#8217;s access information in the JTL5 backend. By saving the configuration form the synchronization of the payment methods and the set up of the webhooks are initiated.</p>
 </div><div class="paragraph">
 <p>If this does not solve the problem, it could be that you use a special fee or coupon module that we do not support. Try to disable this plugin and see if it helps.
 The payment methods are only displayed if the plugin&#8217;s total calculation matches the actual order total.</p>
@@ -474,7 +474,7 @@ The payment methods are only displayed if the plugin&#8217;s total calculation m
     </li>    		    			<li class="nav-level-2">
 	<a href="#_limitations_of_the_synchronization_between_whitelabelname_and_jtl5">
 		<span class="item-number">6.4</span>
-		<span class="item-title">Limitations of the synchronization between VRPay and JTL5</span>
+		<span class="item-title">Limitations of the synchronization between VR Payment and JTL5</span>
 			</a>
     </li>    		    			<li class="nav-level-2">
 	<a href="#_tokenization">

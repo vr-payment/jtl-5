@@ -1,9 +1,9 @@
 
 
-VRPayment Payment for JTL 5.2 and 5.3
+VR Payment integration for JTL 5.2 and 5.3
 =============================
 
-The VRPayment Payment plugin wraps around the VRPayment API. This library facilitates your interaction with various services such as transactions.
+The VR Payment plugin wraps around the VR Payment API. This library facilitates your interaction with various services such as transactions.
 
 ## Requirements
 
@@ -27,11 +27,11 @@ The VRPayment Payment plugin wraps around the VRPayment API. This library facili
 
 5. After installation click on Settings "gear" icon
 
-6. Enter correct data from VRPayment API and click Save. Payment methods will be synchronised and enabled
+6. Enter correct data from VR Payment API and click Save. Payment methods will be synchronised and enabled
 
 
 ## Usage
-The library needs to be configured with your account's space id, user id, and application key which are available in your VRPayment
+The library needs to be configured with your account's space id, user id, and application key which are available in your VR Payment
 account dashboard.
 
 ## Documentation
