@@ -1,6 +1,6 @@
 
 
-VR Payment integration for JTL 5.2 and 5.3
+VR Payment integration for JTL 5.5 and 5.6
 =============================
 
 The VR Payment plugin wraps around the VR Payment API. This library facilitates your interaction with various services such as transactions.
@@ -8,7 +8,7 @@ The VR Payment plugin wraps around the VR Payment API. This library facilitates 
 ## Requirements
 
 - PHP 8.1
-- JTL 5.2.x, 5.3.x
+- JTL 5.5.x, 5.6.x
 
 ## Installation
 
@@ -36,7 +36,7 @@ account dashboard.
 
 ## Documentation
 
-[Documentation](https://plugin-documentation.vr-payment.de/vr-payment/jtl-5/1.0.38/docs/en/documentation.html)
+[Documentation](https://docs.plugin-documentation.vr-payment.de/vr-payment/jtl-5/1.0.39/docs/en/documentation.html)
 
 ## License
 
