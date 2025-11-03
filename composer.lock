@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b4d15d18a8d4ca49e56f82926febc0e2",
+    "content-hash": "859ab3009ddaa3a7026b0ba0db4a165d",
     "packages": [
         {
             "name": "vrpayment/sdk",
-            "version": "4.8.0",
+            "version": "4.8.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/vr-payment/php-sdk.git",
-                "reference": "2053d5fc7c21461d28db2be899082ce01fd37d31"
+                "reference": "f71125113d712715b31f0a27969b8e3fa0d4b1c8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vr-payment/php-sdk/zipball/2053d5fc7c21461d28db2be899082ce01fd37d31",
-                "reference": "2053d5fc7c21461d28db2be899082ce01fd37d31",
+                "url": "https://api.github.com/repos/vr-payment/php-sdk/zipball/f71125113d712715b31f0a27969b8e3fa0d4b1c8",
+                "reference": "f71125113d712715b31f0a27969b8e3fa0d4b1c8",
                 "shasum": ""
             },
             "require": {
@@ -59,9 +59,9 @@
                 "vrpayment"
             ],
             "support": {
-                "source": "https://github.com/vr-payment/php-sdk/tree/4.8.0"
+                "source": "https://github.com/vr-payment/php-sdk/tree/4.8.1"
             },
-            "time": "2025-03-19T12:21:41+00:00"
+            "time": "2025-10-29T13:59:04+00:00"
         }
     ],
     "packages-dev": [],
