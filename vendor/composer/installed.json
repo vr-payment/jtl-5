@@ -6,7 +6,7 @@
             "version_normalized": "4.8.1.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/vr-payment/php-sdk.git",
+                "url": "git@github.com:vr-payment/php-sdk.git",
                 "reference": "f71125113d712715b31f0a27969b8e3fa0d4b1c8"
             },
             "dist": {
@@ -55,9 +55,6 @@
                 "sdk",
                 "vrpayment"
             ],
-            "support": {
-                "source": "https://github.com/vr-payment/php-sdk/tree/4.8.1"
-            },
             "install-path": "../vrpayment/sdk"
         }
     ],
