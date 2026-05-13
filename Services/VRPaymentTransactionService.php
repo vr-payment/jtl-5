@@ -178,6 +178,7 @@ class VRPaymentTransactionService
             $orderId = (int) $orderData->kBestellung;
             // We tell to wawi do not synchronise it, because it's not paid yet. Wawi do not have pending state, so, we have to tell that it's already synchronised.
             // Later, when payment is accepted, we change the flag to N and ask Wawi to synchronise it.
+            VRPaymentHelper::log("confirmTransaction: Order $orderId created. Setting cAbgeholt to NOT_SYNC_TO_WAWI ('" . self::NOT_SYNC_TO_WAWI . "').");
             $this->updateWawiSyncFlag($orderId, self::NOT_SYNC_TO_WAWI);
             $order->data = json_encode([]);
             $order->order_id = $orderId;
@@ -901,6 +902,7 @@ class VRPaymentTransactionService
      * @return void
      */
     public function updateWawiSyncFlag(int $orderId, $flag) {
+        VRPaymentHelper::log("updateWawiSyncFlag: Updating Order $orderId cAbgeholt to '$flag'.");
         Shop::Container()
             ->getDB()->update(
             'tbestellung',
