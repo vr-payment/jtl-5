@@ -11,6 +11,7 @@ use Plugin\jtl_vrpayment\Services\VRPaymentRefundService;
 use Plugin\jtl_vrpayment\Services\VRPaymentTransactionService;
 use Plugin\jtl_vrpayment\VRPaymentHelper;
 use VRPayment\Sdk\ApiClient;
+use VRPayment\Sdk\ApiException;
 use VRPayment\Sdk\Model\TransactionState;
 
 final class Handler
@@ -273,7 +274,18 @@ final class Handler
         $_SESSION['possiblePaymentMethodName'] = $paymentMethod->getName();
         $_SESSION['orderData'] = $orderData;
 
-        $this->confirmTransaction($spaceId, $createdTransactionId);
+        try {
+            $this->confirmTransaction($spaceId, $createdTransactionId);
+        } catch (ApiException $e) {
+            // The service already cancelled the JTL order it had just created.
+            // Redirect to the standard fail page so the user sees a sensible
+            // error instead of an unhandled exception.
+            VRPaymentHelper::log(
+                'getRedirectUrlAfterCreatedTransaction: confirm failed (HTTP '
+                . $e->getCode() . '): ' . $e->getMessage()
+            );
+            return Shop::getURL() . '/' . VRPaymentHelper::PLUGIN_CUSTOM_PAGES['fail-page'][$_SESSION['cISOSprache']];
+        }
 
 		$integration = VRPaymentHelper::getIntegrationType($this->plugin->getId());
 		if ($integration === VRPaymentHelper::INTEGRATION_TYPE_PAYMENT_PAGE) {
