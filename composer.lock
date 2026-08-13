@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "859ab3009ddaa3a7026b0ba0db4a165d",
+    "content-hash": "082c2375e702e4f8b8ef43b5eb2ba553",
     "packages": [
         {
             "name": "vrpayment/sdk",
-            "version": "4.8.1",
+            "version": "4.9.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/vr-payment/php-sdk.git",
-                "reference": "f71125113d712715b31f0a27969b8e3fa0d4b1c8"
+                "reference": "eab4e9bba7e83b30046a4c8b6e73adc605990a94"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/vr-payment/php-sdk/zipball/f71125113d712715b31f0a27969b8e3fa0d4b1c8",
-                "reference": "f71125113d712715b31f0a27969b8e3fa0d4b1c8",
+                "url": "https://api.github.com/repos/vr-payment/php-sdk/zipball/eab4e9bba7e83b30046a4c8b6e73adc605990a94",
+                "reference": "eab4e9bba7e83b30046a4c8b6e73adc605990a94",
                 "shasum": ""
             },
             "require": {
@@ -49,7 +49,7 @@
                     "homepage": "https://www.vr-payment.de/"
                 }
             ],
-            "description": "VRPay SDK for PHP",
+            "description": "VR Payment SDK for PHP",
             "homepage": "http://github.com/vr-payment/php-sdk",
             "keywords": [
                 "api",
@@ -59,9 +59,9 @@
                 "vrpayment"
             ],
             "support": {
-                "source": "https://github.com/vr-payment/php-sdk/tree/4.8.1"
+                "source": "https://github.com/vr-payment/php-sdk/tree/4.9.1"
             },
-            "time": "2025-10-29T13:59:04+00:00"
+            "time": "2026-08-11T12:11:37+00:00"
         }
     ],
     "packages-dev": [],

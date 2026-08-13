@@ -36,7 +36,7 @@ account dashboard.
 
 ## Documentation
 
-[Documentation](https://docs.plugin-documentation.vr-payment.de/vr-payment/jtl-5/1.0.47/docs/en/documentation.html)
+[Documentation](https://docs.plugin-documentation.vr-payment.de/vr-payment/jtl-5/1.0.48/docs/en/documentation.html)
 
 ## Compatibility
 
