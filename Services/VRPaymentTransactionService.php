@@ -17,7 +17,6 @@ use JTL\Shop;
 use Plugin\jtl_vrpayment\VRPaymentHelper;
 use stdClass;
 use VRPayment\Sdk\ApiClient;
-use VRPayment\Sdk\ApiException;
 use VRPayment\Sdk\Model\{AddressCreate,
   CreationEntityState,
   CriteriaOperator,
@@ -151,7 +150,7 @@ class VRPaymentTransactionService
 
         $order = new \stdClass();
         $order->transaction_id = $transactionId;
-        $order->payment_method = $_SESSION['possiblePaymentMethodName'];
+        $order->payment_method = $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_NAME] ?? '';
         $order->space_id = $this->spaceId;
         $order->state = TransactionState::PENDING;
         $order->created_at = date('Y-m-d H:i:s');
@@ -209,16 +208,23 @@ class VRPaymentTransactionService
 
         $integration = VRPaymentHelper::getIntegrationType($this->plugin->getId());
         if ($integration === VRPaymentHelper::INTEGRATION_TYPE_PAYMENT_PAGE) {
-            $paymentMethodConfiguration = $this->getTransactionPaymentMethod($pendingTransaction->getId(), $this->spaceId);
-            if ($paymentMethodConfiguration) {
-                $pendingTransaction->setAllowedPaymentMethodConfigurations([$paymentMethodConfiguration->getId()]);
+            $paymentMethodConfigurationId = (int)($_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID] ?? 0);
+            if ($paymentMethodConfigurationId <= 0) {
+                $paymentMethodConfiguration = $this->getTransactionPaymentMethod(
+                    $pendingTransaction->getId(),
+                    $this->spaceId
+                );
+                $paymentMethodConfigurationId = (int)($paymentMethodConfiguration?->getId() ?? 0);
+            }
+            if ($paymentMethodConfigurationId > 0) {
+                $pendingTransaction->setAllowedPaymentMethodConfigurations([$paymentMethodConfigurationId]);
             }
         }
 
         try {
             $this->apiClient->getTransactionService()
                 ->confirm($this->spaceId, $pendingTransaction);
-        } catch (ApiException $e) {
+        } catch (\Throwable $e) {
             // The JTL order and the local transaction record were created above
             // before the API call. If confirm fails (e.g. HTTP 442 from server-side
             // address validation), the customer never reaches the payment page and
@@ -314,7 +320,7 @@ class VRPaymentTransactionService
         $transaction = $this->getTransactionFromPortal($transactionId);
 
         if (empty($transaction) || empty($transaction->getVersion()) || $transaction->getState() !== TransactionState::PENDING) {
-          $_SESSION['transactionId'] = null;
+          $_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] = null;
           $translations = VRPaymentHelper::getTranslations($this->plugin->getLocalization(), [
             'jtl_vrpayment_transaction_timeout',
             ]);
@@ -597,7 +603,7 @@ class VRPaymentTransactionService
             'updated_at' => date('Y-m-d H:i:s')
         ];
 
-        $paymentMethodName = $_SESSION['possiblePaymentMethodName'];
+        $paymentMethodName = $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_NAME] ?? null;
         if ($paymentMethodName) {
             $data['payment_method'] = $paymentMethodName;
         }
@@ -789,7 +795,7 @@ class VRPaymentTransactionService
      */
     private function createBillingAddress(): AddressCreate
     {
-        $customer = ($_SESSION['orderData'] ?? null)?->oRechnungsadresse;
+        $customer = ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->oRechnungsadresse;
         if ($customer === null) {
             $customer = $_SESSION['Kunde'];
         }
@@ -829,12 +835,11 @@ class VRPaymentTransactionService
             $billingAddress->setDateOfBirth($birthday);
         }
 
-        $gender = $_SESSION['orderData']?->oRechnungsadresse?->cAnrede ?? '';
-        if (empty($gender)) {
-            $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? '';
-        }
+        $gender = ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->oRechnungsadresse?->cAnrede
+            ?? ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->oKunde?->cAnrede
+            ?? ($customer->cAnrede ?? null);
 
-        if ($gender !== null) {
+        if ($gender === 'm' || $gender === 'w') {
             $billingAddress->setGender($gender === 'm' ? Gender::MALE : Gender::FEMALE);
             $billingAddress->setSalutation($gender === 'm' ? 'Mr' : 'Ms');
         }
@@ -847,9 +852,9 @@ class VRPaymentTransactionService
      */
     private function createShippingAddress(): AddressCreate
     {
-        $customer = ($_SESSION['orderData'] ?? null)?->Lieferadresse;
+        $customer = ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->Lieferadresse;
         if ($customer === null) {
-            $customer = $_SESSION['Kunde'];
+            $customer = $_SESSION['Lieferadresse'] ?? $_SESSION['Kunde'];
         }
 
         $shippingAddress = new AddressCreate();
@@ -865,12 +870,11 @@ class VRPaymentTransactionService
         $shippingAddress->setPhoneNumber($this->sanitizeAddressField($customer->cMobil ?? null, 100));
         $shippingAddress->setSalutation($this->sanitizeAddressField($customer->cTitel ?? null, 20));
 
-        $gender = $_SESSION['orderData']?->Lieferadresse?->cAnrede ?? '';
-        if (empty($gender)) {
-            $gender = $_SESSION['orderData']?->oKunde?->cAnrede ?? null;
-        }
+        $gender = ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->Lieferadresse?->cAnrede
+            ?? ($_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] ?? null)?->oKunde?->cAnrede
+            ?? ($customer->cAnrede ?? null);
 
-        if ($gender !== null) {
+        if ($gender === 'm' || $gender === 'w') {
             $shippingAddress->setGender($gender === 'm' ? Gender::MALE : Gender::FEMALE);
             $shippingAddress->setSalutation($gender === 'm' ? 'Mr' : 'Ms');
         }
