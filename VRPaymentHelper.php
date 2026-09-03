@@ -32,6 +32,15 @@ class VRPaymentHelper extends Helper
     const INTEGRATION_TYPE = 'jtl_vrpayment_integration_type';
     const INTEGRATION_TYPE_PAYMENT_PAGE = 'payment_page';
 
+    // Plugin-owned session keys. Keep these namespaced so VR Payment cannot
+    // overwrite generic checkout/session state used by JTL or another payment plugin.
+    const SESSION_TRANSACTION_ID = 'vrpaymentTransactionId';
+    const SESSION_PAYMENT_METHOD_ID = 'vrpaymentPossiblePaymentMethodId';
+    const SESSION_PAYMENT_METHOD_NAME = 'vrpaymentPossiblePaymentMethodName';
+    const SESSION_ORDER_DATA = 'vrpaymentOrderData';
+    const SESSION_JAVASCRIPT_URL = 'vrpaymentJavascriptUrl';
+    const SESSION_APP_JS_URL = 'vrpaymentAppJsUrl';
+
 
     const PAYMENT_METHOD_CONFIGURATION = 'PaymentMethodConfiguration';
     const REFUND = 'Refund';
