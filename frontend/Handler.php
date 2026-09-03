@@ -11,7 +11,6 @@ use Plugin\jtl_vrpayment\Services\VRPaymentRefundService;
 use Plugin\jtl_vrpayment\Services\VRPaymentTransactionService;
 use Plugin\jtl_vrpayment\VRPaymentHelper;
 use VRPayment\Sdk\ApiClient;
-use VRPayment\Sdk\ApiException;
 use VRPayment\Sdk\Model\TransactionState;
 
 final class Handler
@@ -53,7 +52,7 @@ final class Handler
      */
     public function createTransaction(): int
     {
-        $transactionId = $_SESSION['transactionId'] ?? null;
+        $transactionId = $_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] ?? null;
         if (!$transactionId) {
             $order = new Bestellung();
             $order->Positionen = $_SESSION['Warenkorb']->PositionenArr;
@@ -64,7 +63,7 @@ final class Handler
             $createdTransaction = $this->transactionService->createTransaction($order);
             $transactionId = $createdTransaction->getId();
 
-            $_SESSION['transactionId'] = $transactionId;
+            $_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] = $transactionId;
         }
 
         return (int)$transactionId;
@@ -77,88 +76,201 @@ final class Handler
 
     public function getPaymentMethodsForForm(JTLSmarty $smarty): array
     {
-        $this->handleTransaction();
-        $arrayOfPossibleMethods = $_SESSION['arrayOfPossibleMethods'] ?? [];
+        // Do not call the VR Payment API while the customer is only viewing the
+        // payment-method list. JTL has already filtered the locally active methods
+        // by shipping method/customer group. Remote eligibility is checked only
+        // after a VR Payment method has actually been selected.
         $paymentMethods = $smarty->getTemplateVars('Zahlungsarten');
-        foreach ($paymentMethods as $key => $paymentMethod) {
-            if (empty($paymentMethod->cAnbieter) || strtolower($paymentMethod->cAnbieter) !== 'vrpayment') {
-                continue;
-            }
 
-            if (!\in_array($paymentMethod->cModulId, $arrayOfPossibleMethods, true)) {
-                unset($paymentMethods[$key]);
-            }
-        }
-        return $paymentMethods;
+        return \is_array($paymentMethods) ? $paymentMethods : [];
     }
 
     /**
-     * @return void
+     * Lazily creates/synchronises the VR Payment transaction only after the
+     * customer selected a VR Payment method. Returns false when that method is
+     * unavailable or the remote API cannot be reached; callers can then keep the
+     * customer in JTL's payment-selection step instead of producing HTTP 500.
      */
-    private function handleTransaction(): void
+    public function prepareSelectedPayment(): bool
     {
-        $createdTransactionId = $_SESSION['transactionId'] ?? null;
+        $paymentMethod = $_SESSION['Zahlungsart'] ?? null;
+        if (!$this->isVRPaymentMethod($paymentMethod)) {
+            $this->clearPaymentValidation();
+            return true;
+        }
 
-        $arrayOfPossibleMethods = $_SESSION['arrayOfPossibleMethods'] ?? [];
-        $addressCheck = $_SESSION['addressCheck'] ?? null;
-        $currencyCheck = $_SESSION['currencyCheck'] ?? null;
-        $lineItemsCheck = $_SESSION['lineItemsCheck'] ?? null;
-        $paymentMethodCheck = $_SESSION['paymentMethodsCheck'] ?? null;
+        $stateHash = $this->getCheckoutStateHash();
+        $transactionId = (int)($_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] ?? 0);
+        $moduleId = \strtolower((string)($paymentMethod->cModulId ?? ''));
 
-        $md5LieferadresseCheck = isset($_SESSION['Lieferadresse']) && is_array($_SESSION['Lieferadresse']) ? md5(json_encode($_SESSION['Lieferadresse'])) : null;
-        $md5LineItemsCheck = md5(json_encode((array)$_SESSION['Warenkorb']->PositionenArr));
-        if ($addressCheck !== $md5LieferadresseCheck
-          || $lineItemsCheck !== $md5LineItemsCheck
-          || $currencyCheck !== $_SESSION['cWaehrungName']
-          || $paymentMethodCheck !== $_SESSION['Zahlungsart']
+        // A validated, unchanged checkout must not perform another remote request.
+        if (
+            $transactionId > 0
+            && ($_SESSION['vrpaymentValidatedStateHash'] ?? null) === $stateHash
+            && (int)($_SESSION['vrpaymentValidatedTransactionId'] ?? 0) === $transactionId
+            && ($_SESSION['vrpaymentValidatedMethod'] ?? null) === $moduleId
+            && !empty($_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID])
         ) {
-            $arrayOfPossibleMethods = null;
-            if ($createdTransactionId) {
-                $transaction = $this->transactionService->getTransactionFromPortal($createdTransactionId);
-                if ($transaction->getState() === TransactionState::PENDING) {
-                    $this->transactionService->updateTransaction($createdTransactionId);
-                } else {
-                    $this->resetTransaction();
-                    $createdTransactionId = $_SESSION['transactionId'];
-                }
-            }
-
-            $_SESSION['addressCheck'] = md5(json_encode((array)$_SESSION['Lieferadresse']));
-            $_SESSION['lineItemsCheck'] = md5(json_encode((array)$_SESSION['Warenkorb']->PositionenArr));
-            $_SESSION['currencyCheck'] = $_SESSION['cWaehrungName'];
-            $_SESSION['paymentMethodsCheck'] = $_SESSION['Zahlungsart'] ?? null;
+            return true;
         }
 
-        if (!$createdTransactionId || !$arrayOfPossibleMethods) {
-            if (!$createdTransactionId) {
-                $this->resetTransaction();
-                $createdTransactionId = $_SESSION['transactionId'];
+        try {
+            if ($transactionId <= 0) {
+                $transactionId = $this->createTransaction();
             } else {
-                $config = VRPaymentHelper::getConfigByID($this->plugin->getId());
-                $spaceId = $config[VRPaymentHelper::SPACE_ID];
-                $transaction = $this->apiClient->getTransactionService()->read($spaceId, $createdTransactionId);
-
-                $statesToUpdate = [
-                  TransactionState::DECLINE,
-                  TransactionState::FAILED,
-                  TransactionState::VOIDED,
-                  TransactionState::PROCESSING
-                ];
-
-                if (empty($transaction) || empty($transaction->getVersion()) || in_array($transaction->getState(), $statesToUpdate)) {
-                    $this->resetTransaction();
+                // Reuse an existing pending transaction (e.g. after editing an
+                // address/cart). Finished/failed transactions are never reused.
+                $transaction = $this->transactionService->getTransactionFromPortal($transactionId);
+                if (
+                    empty($transaction)
+                    || empty($transaction->getVersion())
+                    || $transaction->getState() !== TransactionState::PENDING
+                ) {
+                    $this->clearTransactionSession();
+                    $transactionId = $this->createTransaction();
                 } else {
-                    $this->transactionService->updateTransaction($createdTransactionId);
+                    $this->transactionService->updateTransaction($transactionId);
                 }
             }
 
-            $possiblePaymentMethods = $this->fetchPossiblePaymentMethods((string)$createdTransactionId);
-            $arrayOfPossibleMethods = [];
+            $possiblePaymentMethods = $this->fetchPossiblePaymentMethods((string)$transactionId);
             foreach ($possiblePaymentMethods as $possiblePaymentMethod) {
-                $arrayOfPossibleMethods[] = VRPaymentHelper::PAYMENT_METHOD_PREFIX . '_' . $possiblePaymentMethod->getId();
+                $possibleModuleId = \strtolower(
+                    VRPaymentHelper::PAYMENT_METHOD_PREFIX . '_' . $possiblePaymentMethod->getId()
+                );
+                if ($possibleModuleId !== $moduleId) {
+                    continue;
+                }
+
+                $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID] = $possiblePaymentMethod->getId();
+                $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_NAME] = $possiblePaymentMethod->getName();
+                $_SESSION['vrpaymentValidatedStateHash'] = $stateHash;
+                $_SESSION['vrpaymentValidatedTransactionId'] = $transactionId;
+                $_SESSION['vrpaymentValidatedMethod'] = $moduleId;
+
+                return true;
             }
-            $_SESSION['arrayOfPossibleMethods'] = $arrayOfPossibleMethods;
+
+            VRPaymentHelper::log(
+                'prepareSelectedPayment: selected method ' . $moduleId
+                . ' is not available for transaction ' . $transactionId . '.'
+            );
+            $this->clearPaymentValidation();
+            $this->addPaymentUnavailableAlert();
+
+            return false;
+        } catch (\Throwable $e) {
+            $this->logCheckoutException('prepareSelectedPayment', $e);
+            // Do not reuse a transaction whose current remote state is unknown.
+            $this->clearTransactionSession();
+            $this->addPaymentUnavailableAlert();
+
+            return false;
         }
+    }
+
+    public function isSelectedVRPaymentMethod(): bool
+    {
+        return $this->isVRPaymentMethod($_SESSION['Zahlungsart'] ?? null);
+    }
+
+    private function isVRPaymentMethod($paymentMethod): bool
+    {
+        if (!\is_object($paymentMethod)) {
+            return false;
+        }
+
+        $provider = \strtolower((string)($paymentMethod->cAnbieter ?? ''));
+        $moduleId = \strtolower((string)($paymentMethod->cModulId ?? ''));
+
+        return $provider === 'vrpayment'
+            || \str_starts_with($moduleId, VRPaymentHelper::PAYMENT_METHOD_PREFIX . '_');
+    }
+
+    private function getCheckoutStateHash(): string
+    {
+        $currency = $_SESSION['Waehrung']?->getCode() ?? ($_SESSION['cWaehrungName'] ?? '');
+        $lineItems = $_SESSION['Warenkorb']?->PositionenArr ?? [];
+
+        $state = [
+            'billing' => $this->getAddressFingerprint($_SESSION['Kunde'] ?? null),
+            'shipping' => $this->getAddressFingerprint($_SESSION['Lieferadresse'] ?? null),
+            'currency' => (string)$currency,
+            'lineItems' => \hash('sha256', \serialize($lineItems)),
+            'paymentMethod' => \strtolower((string)($_SESSION['Zahlungsart']->cModulId ?? '')),
+        ];
+
+        return \hash('sha256', (string)\json_encode($state, JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION));
+    }
+
+    private function getAddressFingerprint($address): array
+    {
+        if (!\is_object($address) && !\is_array($address)) {
+            return [];
+        }
+
+        $address = (object)$address;
+        $fields = [
+            'cFirma', 'cVorname', 'cNachname', 'cStrasse', 'cHausnummer',
+            'cPLZ', 'cOrt', 'cLand', 'cBundesland', 'cMail', 'cTel', 'cMobil',
+            'cTitel', 'cAnrede'
+        ];
+        $result = [];
+        foreach ($fields as $field) {
+            $result[$field] = (string)($address->{$field} ?? '');
+        }
+
+        return $result;
+    }
+
+    private function clearPaymentValidation(): void
+    {
+        unset(
+            $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID],
+            $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_NAME],
+            $_SESSION['vrpaymentValidatedStateHash'],
+            $_SESSION['vrpaymentValidatedTransactionId'],
+            $_SESSION['vrpaymentValidatedMethod'],
+            // Legacy cache keys from the original eager checkout implementation.
+            $_SESSION['arrayOfPossibleMethods'],
+            $_SESSION['addressCheck'],
+            $_SESSION['currencyCheck'],
+            $_SESSION['lineItemsCheck'],
+            $_SESSION['paymentMethodsCheck'],
+            $_SESSION['lastCartItemHash']
+        );
+    }
+
+    private function clearTransactionSession(): void
+    {
+        unset($_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID]);
+        $this->clearPaymentValidation();
+    }
+
+    private function addPaymentUnavailableAlert(): void
+    {
+        $translations = VRPaymentHelper::getTranslations(
+            $this->plugin->getLocalization(),
+            ['jtl_vrpayment_payment_not_available_by_country_or_currency'],
+            false
+        );
+        $message = (string)($translations['jtl_vrpayment_payment_not_available_by_country_or_currency'] ?? '');
+        if ($message === '') {
+            $message = 'Die ausgewählte Zahlungsart ist derzeit nicht verfügbar. Bitte wählen Sie eine andere Zahlungsart.';
+        }
+
+        Shop::Container()->getAlertService()->addAlert(
+            Alert::TYPE_ERROR,
+            $message,
+            'vrpayment_payment_unavailable'
+        );
+    }
+
+    private function logCheckoutException(string $context, \Throwable $e): void
+    {
+        $message = $context . ': ' . \get_class($e) . ' (' . $e->getCode() . '): ' . $e->getMessage();
+        VRPaymentHelper::log($message);
+        Shop::Container()->getLogService()->error('VR Payment checkout error: {message}', ['message' => $message]);
     }
 
     /**
@@ -235,7 +347,7 @@ final class Handler
         ];
 
         if (empty($transaction) || empty($transaction->getVersion()) || in_array($transaction->getState(), $statesToUpdate)) {
-            $_SESSION['transactionId'] = null;
+            $_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] = null;
             $linkHelper = Shop::Container()->getLinkService();
             \header('Location: ' . $linkHelper->getStaticRoute('bestellvorgang.php') . '?editZahlungsart=1');
             exit;
@@ -246,56 +358,65 @@ final class Handler
 
     public function getRedirectUrlAfterCreatedTransaction($orderData): string
     {
+        $linkHelper = Shop::Container()->getLinkService();
+        if (!$this->isSelectedVRPaymentMethod()) {
+            return $linkHelper->getStaticRoute('bestellvorgang.php') . '?editZahlungsart=1';
+        }
+
+        // Keep the final order object available for the existing address mapping.
+        $_SESSION[VRPaymentHelper::SESSION_ORDER_DATA] = $orderData;
+
+        if (!$this->prepareSelectedPayment()) {
+            return $linkHelper->getStaticRoute('bestellvorgang.php') . '?editZahlungsart=1';
+        }
+
         $config = VRPaymentHelper::getConfigByID($this->plugin->getId());
-        $spaceId = $config[VRPaymentHelper::SPACE_ID];
+        $spaceId = (string)$config[VRPaymentHelper::SPACE_ID];
+        $createdTransactionId = (int)($_SESSION[VRPaymentHelper::SESSION_TRANSACTION_ID] ?? 0);
 
-        $createdTransactionId = (int)$_SESSION['transactionId'] ?? null;
-
-        if (empty($createdTransactionId)) {
-            $failedUrl = Shop::getURL() . '/' . VRPaymentHelper::PLUGIN_CUSTOM_PAGES['fail-page'][$_SESSION['cISOSprache']];
-            header("Location: " . $failedUrl);
-            exit;
+        if ($createdTransactionId <= 0) {
+            return $linkHelper->getStaticRoute('bestellvorgang.php') . '?editZahlungsart=1';
         }
-
-        $_SESSION['transactionId'] = $createdTransactionId;
-
-        $_SESSION['javascriptUrl'] = $this->apiClient->getTransactionIframeService()
-          ->javascriptUrl($spaceId, $createdTransactionId);
-        $_SESSION['appJsUrl'] = $this->plugin->getPaths()->getBaseURL() . 'frontend/js/vrpayment-app.js?' . time();
-
-        $paymentMethod = $this->transactionService->getTransactionPaymentMethod($createdTransactionId, $spaceId);
-        if (empty($paymentMethod)) {
-            $failedUrl = Shop::getURL() . '/' . VRPaymentHelper::PLUGIN_CUSTOM_PAGES['fail-page'][$_SESSION['cISOSprache']];
-            header("Location: " . $failedUrl);
-            exit;
-        }
-
-        $_SESSION['possiblePaymentMethodId'] = $paymentMethod->getId();
-        $_SESSION['possiblePaymentMethodName'] = $paymentMethod->getName();
-        $_SESSION['orderData'] = $orderData;
 
         try {
+            $integration = VRPaymentHelper::getIntegrationType($this->plugin->getId());
+
+            // The iframe javascript URL is not needed for Payment Page integration.
+            if ($integration !== VRPaymentHelper::INTEGRATION_TYPE_PAYMENT_PAGE) {
+                $_SESSION[VRPaymentHelper::SESSION_JAVASCRIPT_URL] = $this->apiClient->getTransactionIframeService()
+                    ->javascriptUrl($spaceId, $createdTransactionId);
+                $_SESSION[VRPaymentHelper::SESSION_APP_JS_URL] = $this->plugin->getPaths()->getBaseURL()
+                    . 'frontend/js/vrpayment-app.js?' . time();
+            }
+
+            // Normally this was already resolved when Wero/VR Payment was selected.
+            // Keep an API fallback for existing sessions and unusual checkout flows.
+            if (empty($_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID])) {
+                $paymentMethod = $this->transactionService->getTransactionPaymentMethod(
+                    $createdTransactionId,
+                    $spaceId
+                );
+                if (empty($paymentMethod)) {
+                    $this->addPaymentUnavailableAlert();
+                    return $linkHelper->getStaticRoute('bestellvorgang.php') . '?editZahlungsart=1';
+                }
+                $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_ID] = $paymentMethod->getId();
+                $_SESSION[VRPaymentHelper::SESSION_PAYMENT_METHOD_NAME] = $paymentMethod->getName();
+            }
+
             $this->confirmTransaction($spaceId, $createdTransactionId);
-        } catch (ApiException $e) {
-            // The service already cancelled the JTL order it had just created.
-            // Redirect to the standard fail page so the user sees a sensible
-            // error instead of an unhandled exception.
-            VRPaymentHelper::log(
-                'getRedirectUrlAfterCreatedTransaction: confirm failed (HTTP '
-                . $e->getCode() . '): ' . $e->getMessage()
-            );
-            return Shop::getURL() . '/' . VRPaymentHelper::PLUGIN_CUSTOM_PAGES['fail-page'][$_SESSION['cISOSprache']];
+
+            if ($integration === VRPaymentHelper::INTEGRATION_TYPE_PAYMENT_PAGE) {
+                return $this->apiClient->getTransactionPaymentPageService()
+                    ->paymentPageUrl($spaceId, $createdTransactionId);
+            }
+
+            return VRPaymentHelper::PLUGIN_CUSTOM_PAGES['payment-page'][$_SESSION['cISOSprache']];
+        } catch (\Throwable $e) {
+            $this->logCheckoutException('getRedirectUrlAfterCreatedTransaction', $e);
+            return Shop::getURL() . '/'
+                . VRPaymentHelper::PLUGIN_CUSTOM_PAGES['fail-page'][$_SESSION['cISOSprache']];
         }
-
-		$integration = VRPaymentHelper::getIntegrationType($this->plugin->getId());
-		if ($integration === VRPaymentHelper::INTEGRATION_TYPE_PAYMENT_PAGE) {
-            $redirectUrl = $this->apiClient->getTransactionPaymentPageService()
-              ->paymentPageUrl($spaceId, $createdTransactionId);
-
-            return $redirectUrl;
-        }
-
-        return VRPaymentHelper::PLUGIN_CUSTOM_PAGES['payment-page'][$_SESSION['cISOSprache']];
     }
 
     public function contentUpdate(array $args): void
@@ -304,14 +425,17 @@ final class Handler
 
         switch (Shop::getPageType()) {
             case \PAGE_BESTELLVORGANG:
-                if ($step !== 'accountwahl') {
-                    $this->handleTransaction();
-                }
+                // No VR Payment API traffic while browsing checkout steps.
                 $this->setPaymentMethodLogoSize();
                 break;
 
             case \PAGE_BESTELLABSCHLUSS:
-                if ($_SESSION['Zahlungsart']?->nWaehrendBestellung ?? null === 1) {
+                // Critical compatibility guard: never intercept PayPal or any other
+                // payment provider merely because nWaehrendBestellung is enabled.
+                if (
+                    $this->isSelectedVRPaymentMethod()
+                    && (int)($_SESSION['Zahlungsart']->nWaehrendBestellung ?? 0) === 1
+                ) {
                     $smarty = $args['smarty'];
                     $order = $smarty->getTemplateVars('Bestellung');
 
@@ -335,14 +459,5 @@ final class Handler
         }
     }
 
-    /**
-     * @return void
-     */
-    private function resetTransaction(): void
-    {
-        $_SESSION['transactionId'] = null;
-        $createdTransactionId = $this->createTransaction();
-        $_SESSION['transactionId'] = $createdTransactionId;
-    }
 
 }
