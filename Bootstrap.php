@@ -13,7 +13,6 @@ use JTL\Plugin\Bootstrapper;
 use JTL\Plugin\Payment\Method;
 use JTL\Shop;
 use JTL\Smarty\JTLSmarty;
-use Plugin\jtl_paypal\paymentmethod\PendingPayment;
 use Plugin\jtl_vrpayment\adminmenu\AdminTabProvider;
 use Plugin\jtl_vrpayment\frontend\Handler as FrontendHandler;
 use Plugin\jtl_vrpayment\Services\VRPaymentPaymentService;
@@ -148,30 +147,6 @@ class Bootstrap extends Bootstrapper
      */
     private function listenFrontendHooks(Dispatcher $dispatcher, FrontendHandler $handler): void
     {
-        $cartUpdateListener = function () use ($handler) {
-            $transactionId = $_SESSION['transactionId'] ?? null;
-            if ($transactionId) {
-                $lastCartItemsHash = $_SESSION['lastCartItemHash'] ?? null;
-                $lineItems = $_SESSION['Warenkorb']?->PositionenArr;
-
-                if ($lineItems === null) {
-                    return;
-                }
-
-                $cartItemsHash = md5(json_encode($lineItems));
-
-                if ($lastCartItemsHash !== $cartItemsHash) {
-                    $_SESSION['lastCartItemHash'] = $cartItemsHash;
-                    $transactionService = $this->getTransactionService();
-                    $transactionService->updateTransaction($transactionId);
-                }
-            }
-        };
-
-        $cartUpdateHooks = [\HOOK_BESTELLVORGANG_PAGE, \HOOK_WARENKORB_PAGE, \HOOK_WARENKORB_CLASS_FUEGEEIN, \HOOK_WARENKORB_LOESCHE_POSITION, \HOOK_WARENKORB_LOESCHE_ALLE_SPEZIAL_POS];
-        foreach ($cartUpdateHooks as $cartUpdateHook) {
-            $dispatcher->listen('shop.hook.' . $cartUpdateHook, $cartUpdateListener);
-        }
 
         $dispatcher->listen('shop.hook.' . \HOOK_SMARTY_OUTPUTFILTER, [$handler, 'contentUpdate']);
         $dispatcher->listen('shop.hook.' . \HOOK_BESTELLABSCHLUSS_INC_BESTELLUNGINDB_ENDE, function ($args) use ($handler) {
@@ -186,10 +161,14 @@ class Bootstrap extends Bootstrapper
             }
         });
 
-        $dispatcher->listen('shop.hook.' . \HOOK_BESTELLVORGANG_PAGE_STEPZAHLUNG, function () use ($handler) {
-            $smarty = Shop::Smarty();
-            $paymentMethods = $handler->getPaymentMethodsForForm($smarty);
-            $smarty->assign('Zahlungsarten', $paymentMethods);
+        $dispatcher->listen('shop.hook.' . \HOOK_BESTELLVORGANG_PAGE_STEPZAHLUNG_PLAUSI, function () use ($handler) {
+            // JTL has already placed the customer's chosen payment method in the
+            // session when this hook runs (Shop 5.7.x). Only now may VR Payment
+            // create a remote transaction and transfer checkout/customer data.
+            global $zahlungsangaben;
+            if (!$handler->prepareSelectedPayment()) {
+                $zahlungsangaben = 0;
+            }
         });
 
         $transactionService = $this->getTransactionService();
