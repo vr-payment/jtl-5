@@ -4,10 +4,10 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553
+class ComposerStaticInita402e67f5ad6ab8ab95dcdb965a2507e
 {
     public static $prefixLengthsPsr4 = array (
-        'V' => 
+        'V' =>
         array (
             'VRPayment\\Sdk\\' => 14,
             'VRPaymentPayment\\' => 17,
@@ -15,11 +15,11 @@ class ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553
     );
 
     public static $prefixDirsPsr4 = array (
-        'VRPayment\\Sdk\\' => 
+        'VRPayment\\Sdk\\' =>
         array (
             0 => __DIR__ . '/..' . '/vrpayment/sdk/lib',
         ),
-        'VRPaymentPayment\\' => 
+        'VRPaymentPayment\\' =>
         array (
             0 => __DIR__ . '/../..' . '/VRPayment',
         ),
@@ -32,9 +32,9 @@ class ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553::$prefixDirsPsr4;
-            $loader->classMap = ComposerStaticInit082c2375e702e4f8b8ef43b5eb2ba553::$classMap;
+            $loader->prefixLengthsPsr4 = ComposerStaticInita402e67f5ad6ab8ab95dcdb965a2507e::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInita402e67f5ad6ab8ab95dcdb965a2507e::$prefixDirsPsr4;
+            $loader->classMap = ComposerStaticInita402e67f5ad6ab8ab95dcdb965a2507e::$classMap;
 
         }, null, ClassLoader::class);
     }

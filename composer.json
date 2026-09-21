@@ -11,6 +11,6 @@
     }
   },
   "require": {
-    "vrpayment/sdk": "4.9.1"
+    "vrpayment/sdk": "4.9.2"
   }
 }
