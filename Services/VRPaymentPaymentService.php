@@ -245,37 +245,59 @@ class VRPaymentPaymentService
 	protected function disablePaymentMethods(array $installedPaymentMethodsIds, array $paymentMethodsFromPortal)
 	{
 		foreach ($installedPaymentMethodsIds as $installedPaymentMethodsId) {
-			if (!in_array($installedPaymentMethodsId, $paymentMethodsFromPortal)) {
+			if (!in_array($installedPaymentMethodsId, $paymentMethodsFromPortal, true)) {
 				$method = new stdClass();
 				$method->nActive = 0;
 				Shop::Container()->getDB()->update(self::TABLE_NAME_PAYMENT_METHODS, 'cModulId', $installedPaymentMethodsId, $method);
-				$check = Shop::Container()->getDB()->selectAll(self::TABLE_NAME_PAYMENT_METHODS, 'cModulId', $installedPaymentMethodsId);
-				Shop::Container()->getDB()->delete(self::TABLE_NAME_SHIPPING_PAYMENT, 'kZahlungsart', ($check[0])->kZahlungsart);
+
+				// Do not delete tversandartzahlungsart rows here. The merchant may have
+				// intentionally limited Wero/VR Payment to selected shipping methods
+				// (for example EU-only shipping). Keeping the assignments allows a
+				// later reactivation/sync without silently enabling the method globally.
 			}
 		}
 	}
 
 	/**
-	 * @param $status
+	 * Toggle the VR Payment methods without overwriting the merchant's existing
+	 * shipping-method/payment-method assignments.
+	 *
+	 * @param int  $status
+	 * @param bool $preserveShippingAssignments Set to false only for a real uninstall.
 	 * @return void
 	 */
-	public function updatePaymentMethodStatus($status = self::STATUS_ENABLED): void
-	{
-		$paymentMethodsToEnableIds = [];
-		$paymentMethodsIds = $this->getInstalledPaymentMethods($status === self::STATUS_ENABLED ? self::STATUS_DISABLED : self::STATUS_ENABLED);
+	public function updatePaymentMethodStatus(
+		int $status = self::STATUS_ENABLED,
+		bool $preserveShippingAssignments = true
+	): void {
+		$paymentMethodsIds = $this->getInstalledPaymentMethods(
+			$status === self::STATUS_ENABLED ? self::STATUS_DISABLED : self::STATUS_ENABLED
+		);
+
 		foreach ($paymentMethodsIds as $paymentMethodId) {
 			$method = new stdClass();
 			$method->nActive = $status;
-			Shop::Container()->getDB()->update(self::TABLE_NAME_PAYMENT_METHODS, 'cModulId', $paymentMethodId, $method);
-			$check = Shop::Container()->getDB()->selectAll(self::TABLE_NAME_PAYMENT_METHODS, 'cModulId', $paymentMethodId);
-			$paymentMethodsToEnableIds[] = ($check[0])->kZahlungsart;
+			Shop::Container()->getDB()->update(
+				self::TABLE_NAME_PAYMENT_METHODS,
+				'cModulId',
+				$paymentMethodId,
+				$method
+			);
 
-			if ($status === self::STATUS_DISABLED) {
-				Shop::Container()->getDB()->delete(self::TABLE_NAME_SHIPPING_PAYMENT, 'kZahlungsart', ($check[0])->kZahlungsart);
+			if (!$preserveShippingAssignments && $status === self::STATUS_DISABLED) {
+				$check = Shop::Container()->getDB()->selectAll(
+					self::TABLE_NAME_PAYMENT_METHODS,
+					'cModulId',
+					$paymentMethodId
+				);
+				if (!empty($check)) {
+					Shop::Container()->getDB()->delete(
+						self::TABLE_NAME_SHIPPING_PAYMENT,
+						'kZahlungsart',
+						($check[0])->kZahlungsart
+					);
+				}
 			}
-		}
-		if ($status === self::STATUS_ENABLED) {
-			$this->enablePaymentMethods($paymentMethodsToEnableIds);
 		}
 	}
 
@@ -310,7 +332,10 @@ class VRPaymentPaymentService
 					$method = new stdClass();
 					$method->nActive = 1;
 					Shop::Container()->getDB()->update(self::TABLE_NAME_PAYMENT_METHODS, 'cModulId', $slug, $method);
-					$this->enablePaymentMethods([($check[0])->kZahlungsart]);
+
+					// Existing payment method: preserve its manually configured
+					// tversandartzahlungsart assignments. Do not re-enable it for all
+					// shipping methods merely because the portal reports it active again.
 				} else {
 					$descriptions = [];
 					$languageMapping = $this->localeLanguageMapping;
@@ -363,4 +388,5 @@ class VRPaymentPaymentService
 		);
 	}
 }
+
 
