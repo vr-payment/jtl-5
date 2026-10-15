@@ -11,7 +11,7 @@
             "version": "4.9.2",
             "source": {
                 "type": "git",
-                "url": "git@github.com:vr-payment/php-sdk.git",
+                "url": "https://github.com/vr-payment/php-sdk.git",
                 "reference": "a15f9e829dbf4de8882cb5f49e5e4cf0c8d25ec9"
             },
             "dist": {
@@ -58,6 +58,9 @@
                 "sdk",
                 "vrpayment"
             ],
+            "support": {
+                "source": "https://github.com/vr-payment/php-sdk/tree/4.9.2"
+            },
             "time": "2026-09-16T13:52:08+00:00"
         }
     ],
